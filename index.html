@@ -233,7 +233,7 @@
   // Script (deve terminare con /exec). Vedi le istruzioni di
   // pubblicazione ricevute in chat insieme a questo file e a Code.gs.
   // ============================================================
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwzUIV_OCI-0epLxpdT3Hhusf3DIH1Ej0qzN1vthyGWYXdmh5L1uby4Yz2kk-Z4R3n3Rg/exec';
+  const APPS_SCRIPT_URL = 'https://eocarboni-ui.github.io/magazzinoengie/';
 
   const COMMON_UNITS = ['pz','m','kg','l','conf.','bobina','kit','coppia','set'];
 
@@ -430,7 +430,26 @@
     syncData({forceRender:true});
   }
 
-  function startScanner(){
+  // ============================================================
+  // Rilascio "duro" della fotocamera: su alcuni browser mobile (in
+  // particolare iOS Safari) Html5Qrcode.stop()/.clear() non liberano
+  // sempre la traccia video abbastanza in fretta, e il tentativo di
+  // scansione successivo fallisce con "fotocamera occupata". Qui
+  // fermiamo esplicitamente ogni MediaStreamTrack rimasta agganciata
+  // al <video>, come rete di sicurezza.
+  // ============================================================
+  function hardStopVideoTracks(){
+    try{
+      const video = document.querySelector('#reader video');
+      if(video && video.srcObject){
+        video.srcObject.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} });
+        video.srcObject = null;
+      }
+    }catch(e){}
+  }
+
+  function startScanner(retryCount){
+    retryCount = retryCount || 0;
     const readerEl = document.getElementById('reader');
     if(!readerEl) return;
     if(typeof Html5Qrcode === 'undefined'){ showToast('Libreria scanner non disponibile', 'out'); S.scanning=false; render(); return; }
@@ -445,10 +464,18 @@
       config, onScanSuccess, () => {}
     ).catch((err)=>{
       const name = (err && (err.name || err.message || '')) + '';
+      const isBusy = /NotReadable|TrackStart|Could not start/i.test(name);
+      // La fotocamera della scansione precedente potrebbe non essere
+      // ancora stata rilasciata dal sistema operativo: ritenta un paio
+      // di volte con un piccolo ritardo prima di arrenderti.
+      if(isBusy && retryCount < 2){
+        setTimeout(()=>{ startScanner(retryCount + 1); }, 500);
+        return;
+      }
       let msg = 'Fotocamera non disponibile: usa inserimento manuale';
       if(/NotAllowed|Permission/i.test(name)) msg = 'Permesso fotocamera negato. Vai nelle impostazioni del browser per questo sito e abilita la fotocamera, poi ricarica la pagina.';
       else if(/NotFound|DevicesNotFound/i.test(name)) msg = 'Nessuna fotocamera trovata su questo dispositivo.';
-      else if(/NotReadable|TrackStart/i.test(name)) msg = 'Fotocamera occupata da un’altra app. Chiudila e riprova.';
+      else if(isBusy) msg = 'Fotocamera occupata (non ancora rilasciata dalla scansione precedente). Attendi un secondo e premi di nuovo "Avvia scanner"; se persiste, ricarica la pagina.';
       showToast(msg, 'out');
       S.scanning = false; render();
     });
@@ -456,9 +483,13 @@
 
   function stopScanner(cb){
     if(S.html5QrCode && S.scanning){
-      S.html5QrCode.stop().then(()=>{ S.html5QrCode.clear(); S.html5QrCode = null; S.scanning = false; if(cb) cb(); })
-      .catch(()=>{ S.html5QrCode = null; S.scanning = false; if(cb) cb(); });
-    } else if(cb) cb();
+      S.html5QrCode.stop()
+        .then(()=>{ try{ S.html5QrCode.clear(); }catch(e){} hardStopVideoTracks(); S.html5QrCode = null; S.scanning = false; if(cb) cb(); })
+        .catch(()=>{ hardStopVideoTracks(); S.html5QrCode = null; S.scanning = false; if(cb) cb(); });
+    } else {
+      hardStopVideoTracks();
+      if(cb) cb();
+    }
   }
 
   function onScanSuccess(decodedText){ stopScanner(()=>{ handleCode(decodedText.trim()); }); }
@@ -991,7 +1022,10 @@
       }
       document.querySelectorAll('.dir-toggle button').forEach(b=>{ b.onclick = () => setDirection(b.dataset.dir); });
       const startBtn = document.getElementById('start-scan');
-      if(startBtn) startBtn.onclick = () => { S.scanning = true; render(); startScanner(); };
+      if(startBtn) startBtn.onclick = () => {
+        if(S.scanning) return;
+        S.scanning = true; render(); startScanner();
+      };
       const stopBtn = document.getElementById('stop-scan');
       if(stopBtn) stopBtn.onclick = () => stopScanner(render);
       const manualGo = document.getElementById('manual-go');
