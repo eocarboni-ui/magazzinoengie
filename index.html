@@ -8,10 +8,6 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.5.4/papaparse.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
 <style>
   :root{
@@ -163,6 +159,7 @@
   .move-row .info{flex:1;min-width:0;}
   .move-row .name{font-weight:600;font-size:14px;}
   .move-row .meta{font-size:11px;color:var(--ink-dim);font-family:'JetBrains Mono',monospace;margin-top:3px;line-height:1.5;}
+  .move-row .meta a{color:var(--brand);}
   .move-row .qty{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;white-space:nowrap;}
 
   .tabs{
@@ -231,76 +228,26 @@
 
 <script>
 (function(){
-  const firebaseConfig = {
-    apiKey: "AIzaSyDazo07WCjOZe7U7ez8xHvw6rFySmJIQcY",
-    authDomain: "magazzino-prova.firebaseapp.com",
-    projectId: "magazzino-prova",
-    storageBucket: "magazzino-prova.firebasestorage.app",
-    messagingSenderId: "514987024989",
-    appId: "1:514987024989:web:54f193c8228d1ea76e63b4"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const storage = firebase.storage();
+  // ============================================================
+  // CONFIGURAZIONE — incolla qui l'URL del tuo Web App Google Apps
+  // Script (deve terminare con /exec). Vedi le istruzioni di
+  // pubblicazione ricevute in chat insieme a questo file e a Code.gs.
+  // ============================================================
+  const APPS_SCRIPT_URL = 'INCOLLA_QUI_URL_APPS_SCRIPT';
 
   const COMMON_UNITS = ['pz','m','kg','l','conf.','bobina','kit','coppia','set'];
 
-  const DEFAULT_CATEGORIES = [
-    { name:'Cavi elettrici', unit:'m', fields:[
-      {key:'sigla', label:'Sigla cavo (CEI-UNEL 35011)', options:[
-        'FG16OR16 (ex FG7OR)','FG16OM16 (ex FG7OM1)','FG16M16 (ex FG7M1)','FG16R16 (ex FG7R)',
-        'FS17 (ex N07V-K)','FG17 (ex N07G9-K)','FG16H1R16','N1VVK','N1VV-K',
-        'H07V-K','H07V-U','H07RN-F','H05RN-F','H05VV-F','H03VV-F','FROR',
-        'FTG10OM1','FTG18OM1','RG58','UTP Cat.6'
-      ]},
-      {key:'sezione', label:'Sezione (mm2, CEI-UNEL/IEC 60228)', options:['0.5','0.75','1','1.5','2.5','4','6','10','16','25','35','50','70','95','120','150','185','240','300','400','500','630']},
-      {key:'poli', label:'N. poli/conduttori', options:['1','2','3','4','5','7','12']},
-      {key:'marca', label:'Marca', options:['Prysmian','Nexans','General Cable','Cavicel','Elandcavi']},
-      {key:'codiceProduttore', label:'Codice produttore', options:[]}
-    ]},
-    { name:'Canalizzazioni e supporti', unit:'m', fields:[
-      {key:'tipo', label:'Tipo', options:['Canalina metallica','Passerella','Tubo corrugato','Guaina spiralata','Canalina PVC']},
-      {key:'dimensioni', label:'Dimensioni (LxH mm)', options:['50x25','75x25','100x50','150x50','200x60','300x75']},
-      {key:'materiale', label:'Materiale', options:['Acciaio zincato','PVC','Alluminio','Acciaio inox']},
-      {key:'marca', label:'Marca', options:[]}
-    ]},
-    { name:'Quadri e componenti BT', unit:'pz', fields:[
-      {key:'tipo', label:'Tipo', options:['Interruttore magnetotermico','Differenziale','Magnetotermico differenziale','Sezionatore','Contattore','Quadro completo','Fusibile']},
-      {key:'marca', label:'Marca', options:['ABB','Schneider Electric','Siemens','Legrand','Eaton']},
-      {key:'caratteristiche', label:'Caratteristiche (In/poli/Icu)', options:[]},
-      {key:'codiceArticolo', label:'Codice articolo', options:[]}
-    ]},
-    { name:'Connettori e morsetteria', unit:'pz', fields:[
-      {key:'tipo', label:'Tipo', options:['Morsetto','Capocorda','Pressacavo','Connettore rapido','Morsetto a molla']},
-      {key:'sezione', label:'Sezione compatibile (mm2)', options:['0.5','0.75','1','1.5','2.5','4','6','10','16','25','35','50','70','95']},
-      {key:'marca', label:'Marca', options:['Wago','Phoenix Contact','Weidmuller']}
-    ]},
-    { name:'Illuminazione', unit:'pz', fields:[
-      {key:'tipo', label:'Tipo', options:['Plafoniera LED','Faretto','Lampada di emergenza','Proiettore','Segnalatore']},
-      {key:'potenza', label:'Potenza (W)', options:['5','9','18','36','50','100']},
-      {key:'ip', label:'Grado IP', options:['IP20','IP44','IP65','IP66']},
-      {key:'marca', label:'Marca', options:[]}
-    ]},
-    { name:'Strumentazione e misura', unit:'pz', fields:[
-      {key:'tipo', label:'Tipo', options:['Trasformatore di corrente (TA)','Trasformatore di tensione (TV)','Contatore energia','Analizzatore di rete','Multimetro']},
-      {key:'marca', label:'Marca', options:['Schneider Electric','ABB','Circutor','Carlo Gavazzi']}
-    ]},
-    { name:'DPI e materiale di consumo', unit:'pz', fields:[
-      {key:'tipo', label:'Tipo', options:['Guanti isolanti','Casco','Nastro isolante','Fascette','Occhiali protettivi','Scarpe antinfortunistiche']},
-      {key:'marca', label:'Marca', options:[]}
-    ]},
-    { name:'Altro', unit:'pz', fields:[
-      {key:'descrizione', label:'Descrizione', options:[]}
-    ]}
-  ];
-
   const S = {
     tab: 'scan', direction: 'IN', operator: null, scanning: false, pending: null,
-    categories: {}, catalog: {}, movements: [], toast: null,
+    categories: {}, catalog: {}, movements: [], folders: null, toast: null,
     filterHistory: '', filterStock: '', html5QrCode: null, loaded: false
   };
 
   const OPERATOR_KEY = 'operator-name';
+
+  function isConfigured(){
+    return typeof APPS_SCRIPT_URL === 'string' && /^https:\/\/script\.google(usercontent)?\.com\//.test(APPS_SCRIPT_URL);
+  }
 
   function slug(s){
     return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || ('cat-' + Date.now().toString(36));
@@ -322,45 +269,41 @@
     showToast._t = setTimeout(()=>{ slot.innerHTML = ''; }, 2400);
   }
 
-  let movementsReady = false, catalogReady = false, categoriesReady = false, seedAttempted = false;
-  function markReadyIfComplete(){
-    if(movementsReady && catalogReady && categoriesReady && !S.loaded){ S.loaded = true; }
-    render();
+  // ---------- Backend API (Google Apps Script + Google Sheets/Drive) ----------
+
+  async function apiGet(){
+    const res = await fetch(APPS_SCRIPT_URL + '?action=getAll&_=' + Date.now());
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+  async function apiPost(payload){
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita il preflight CORS su Apps Script
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(data && data.error) throw new Error(data.error);
+    return data;
   }
 
-  function seedDefaultCategoriesIfEmpty(snap){
-    if(seedAttempted) return;
-    seedAttempted = true;
-    if(snap.empty){
-      const batch = db.batch();
-      DEFAULT_CATEGORIES.forEach(cat=>{
-        const key = slug(cat.name);
-        batch.set(db.collection('categories').doc(key), cat);
-      });
-      batch.commit().catch(()=>{});
+  let syncFailing = false;
+  async function syncData(opts){
+    opts = opts || {};
+    try{
+      const data = await apiGet();
+      S.movements = data.movements || [];
+      S.catalog = data.catalog || {};
+      if(data.categories && Object.keys(data.categories).length) S.categories = data.categories;
+      if(data.folders) S.folders = data.folders;
+      S.loaded = true;
+      if(syncFailing){ syncFailing = false; showToast('Connessione ripristinata', 'in'); }
+      if(opts.forceRender || (!S.scanning && !S.pending)) render();
+    }catch(e){
+      if(!S.loaded){ S.loaded = true; render(); }
+      if(!syncFailing){ syncFailing = true; showToast('Impossibile aggiornare i dati: verifica la connessione', 'out'); }
     }
-  }
-
-  function initFirestoreListeners(){
-    db.collection('movements').orderBy('timestamp','desc').limit(1000)
-      .onSnapshot(snap => {
-        S.movements = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-        movementsReady = true; markReadyIfComplete();
-      }, () => { movementsReady = true; markReadyIfComplete(); });
-
-    db.collection('catalog').onSnapshot(snap => {
-      const cat = {};
-      snap.forEach(d => { cat[d.id] = d.data(); });
-      S.catalog = cat; catalogReady = true; markReadyIfComplete();
-    }, () => { catalogReady = true; markReadyIfComplete(); });
-
-    db.collection('categories').onSnapshot(snap => {
-      seedDefaultCategoriesIfEmpty(snap);
-      const cats = {};
-      snap.forEach(d => { cats[d.id] = d.data(); });
-      if(Object.keys(cats).length) S.categories = cats;
-      categoriesReady = true; markReadyIfComplete();
-    }, () => { categoriesReady = true; markReadyIfComplete(); });
   }
 
   function loadOperator(){
@@ -412,7 +355,7 @@
 
   async function processImportRows(rows){
     if(!rows.length){ showToast('File CSV vuoto o non leggibile', 'out'); return; }
-    showToast('Importazione in corso\u2026', 'in');
+    showToast('Importazione in corso…', 'in');
 
     const norm = (row, keys) => {
       for(const k of keys){ if(row[k] != null && String(row[k]).trim() !== '') return String(row[k]).trim(); }
@@ -430,7 +373,7 @@
       const categoryName = norm(row, ['categoria','Categoria','CATEGORIA']) || 'Altro';
       const categoryKey = slug(categoryName);
       const existingCat = S.categories[categoryKey];
-      const unit = norm(row, ['unita','unit\u00e0','Unita','Unit\u00e0']) || (existingCat ? existingCat.unit : 'pz');
+      const unit = norm(row, ['unita','unità','Unita','Unità']) || (existingCat ? existingCat.unit : 'pz');
       const attrsRaw = norm(row, ['attributi','Attributi']);
       const giacenzaIniziale = parseFloat(norm(row, ['giacenza_iniziale','giacenzaIniziale','scorta_iniziale','Giacenza_iniziale']));
       const attrs = {};
@@ -445,7 +388,7 @@
         });
       }
 
-      catalogRows.push({ code, name, categoryKey, categoryName, unit, attrs, giacenzaIniziale });
+      catalogRows.push({ code, name, categoryKey, categoryName, unit, attrs, giacenzaIniziale: isNaN(giacenzaIniziale) ? 0 : giacenzaIniziale });
 
       if(!categoryUpdates[categoryKey]){
         const fieldsMap = {};
@@ -467,44 +410,24 @@
       const fields = Object.keys(cu.fieldsMap).map(k => ({
         key: k, label: cu.fieldsMap[k].label, options: Array.from(cu.fieldsMap[k].options)
       }));
-      try{ await db.collection('categories').doc(key).set({ name: cu.name, unit: cu.unit || 'pz', fields }, { merge:true }); }
+      try{ await apiPost({ action:'upsertCategory', category:{ key, name: cu.name, unit: cu.unit || 'pz', fields } }); }
       catch(e){}
     }
 
     let written = 0, failed = 0;
-    for(let i = 0; i < catalogRows.length; i += 400){
-      const chunk = catalogRows.slice(i, i + 400);
-      const batch = db.batch();
-      chunk.forEach(r=>{
-        const ref = db.collection('catalog').doc(r.code);
-        batch.set(ref, { name: r.name, categoryKey: r.categoryKey, categoryName: r.categoryName, unit: r.unit, attributes: r.attrs });
-      });
-      try{ await batch.commit(); written += chunk.length; }
-      catch(e){ failed += chunk.length; }
-    }
+    try{
+      const res = await apiPost({ action:'bulkImport', rows: catalogRows });
+      written = (res && res.written) || catalogRows.length;
+    }catch(e){ failed = catalogRows.length; }
 
-    const stockRows = catalogRows.filter(r => r.giacenzaIniziale && r.giacenzaIniziale > 0);
-    let stockWritten = 0;
-    for(let i = 0; i < stockRows.length; i += 400){
-      const chunk = stockRows.slice(i, i + 400);
-      const batch = db.batch();
-      chunk.forEach(r=>{
-        const ref = db.collection('movements').doc();
-        batch.set(ref, {
-          code: r.code, name: r.name, categoryKey: r.categoryKey, categoryName: r.categoryName,
-          unit: r.unit, attributes: r.attrs, direction: 'IN', qty: r.giacenzaIniziale,
-          operator: S.operator || 'Import catalogo', dest: 'Giacenza iniziale da importazione', timestamp: Date.now()
-        });
-      });
-      try{ await batch.commit(); stockWritten += chunk.length; }
-      catch(e){}
-    }
+    const stockCount = catalogRows.filter(r => r.giacenzaIniziale && r.giacenzaIniziale > 0).length;
 
     let msg = `Importati ${written} prodotti in ${catKeys.length} categorie`;
-    if(stockWritten) msg += `, giacenza iniziale su ${stockWritten}`;
-    if(skipped) msg += ` \u2014 ${skipped} righe saltate (codice mancante)`;
-    if(failed) msg += ` \u2014 ${failed} non salvati (errore)`;
+    if(stockCount) msg += `, giacenza iniziale su ${stockCount}`;
+    if(skipped) msg += ` — ${skipped} righe saltate (codice mancante)`;
+    if(failed) msg += ` — errore durante l'importazione, riprova`;
     showToast(msg, failed ? 'out' : 'in');
+    syncData({forceRender:true});
   }
 
   function startScanner(){
@@ -525,7 +448,7 @@
       let msg = 'Fotocamera non disponibile: usa inserimento manuale';
       if(/NotAllowed|Permission/i.test(name)) msg = 'Permesso fotocamera negato. Vai nelle impostazioni del browser per questo sito e abilita la fotocamera, poi ricarica la pagina.';
       else if(/NotFound|DevicesNotFound/i.test(name)) msg = 'Nessuna fotocamera trovata su questo dispositivo.';
-      else if(/NotReadable|TrackStart/i.test(name)) msg = 'Fotocamera occupata da un\u2019altra app. Chiudila e riprova.';
+      else if(/NotReadable|TrackStart/i.test(name)) msg = 'Fotocamera occupata da un’altra app. Chiudila e riprova.';
       showToast(msg, 'out');
       S.scanning = false; render();
     });
@@ -592,7 +515,7 @@
     el.innerHTML = files.map((f,i) => `
       <div class="photo-thumb">
         <img src="${URL.createObjectURL(f)}">
-        <button type="button" class="photo-rm" data-i="${i}">\u00d7</button>
+        <button type="button" class="photo-rm" data-i="${i}">×</button>
       </div>
     `).join('');
     el.querySelectorAll('.photo-rm').forEach(btn=>{
@@ -605,33 +528,43 @@
   }
 
   // ============================================================
-  // Le foto DDT/materiale sono al momento SOLO dimostrative: i campi
-  // funzionano (selezione, anteprima, rimozione) ma i file non vengono
-  // caricati da nessuna parte -- si registra solo il nome del file.
-  // Quando attiverai Firebase Storage (Blaze + bucket + regole + CORS),
-  // metti questo flag a true per abilitare il caricamento reale.
+  // Le foto DDT/materiale vengono caricate su Google Drive tramite
+  // l'azione "uploadPhoto" dello script Apps Script, organizzate in
+  // cartelle Fornitore -> Prodotto_Data. Nessun costo, nessuna carta
+  // di credito richiesta (a differenza di Firebase Storage).
   // ============================================================
-  const PHOTOS_STORAGE_ENABLED = false;
+  const PHOTOS_STORAGE_ENABLED = true;
+
+  function fileToBase64(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        resolve(comma > -1 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 
   async function uploadPhotoSet(files, kind, name, dest){
     if(!files || !files.length) return [];
-    if(!PHOTOS_STORAGE_ENABLED){
-      // Modalita' dimostrativa: nessuna chiamata a Firebase Storage,
-      // si registra solo il nome del file scelto.
-      return files.map(f => f.name);
-    }
-    const supplierFolder = slug(dest || 'senza-fornitore');
-    const productFolder = slug(name) + '_' + new Date().toISOString().slice(0,10);
-    const paths = [];
+    if(!PHOTOS_STORAGE_ENABLED) return files.map(f => f.name);
+    const links = [];
     for(const file of files){
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `${kind}/${supplierFolder}/${productFolder}/${Date.now()}_${safeName}`;
       try{
-        await storage.ref().child(path).put(file);
-        paths.push(path);
-      }catch(e){ /* skip this file, continue with the rest */ }
+        const dataBase64 = await fileToBase64(file);
+        const res = await apiPost({
+          action: 'uploadPhoto',
+          kind, supplier: dest || 'Senza fornitore', product: name,
+          dataBase64, mimeType: file.type || 'image/jpeg',
+          filename: file.name || ('foto_' + Date.now() + '.jpg')
+        });
+        if(res && res.url) links.push(res.url);
+      }catch(e){ /* salta questo file, prosegue con gli altri */ }
     }
-    return paths;
+    return links;
   }
 
   async function confirmMovement(){
@@ -645,56 +578,61 @@
     if(!qty || qty <= 0){ showToast('Quantita non valida', 'out'); return; }
     if(!S.operator){ showToast('Imposta il tuo nome operatore in alto', 'out'); return; }
 
+    const confirmBtn = document.getElementById('confirm-btn');
+    const originalBtnText = confirmBtn ? confirmBtn.textContent : '';
+    if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = 'Salvataggio…'; }
+
     let attrs = {};
     let categoryKey = p.categoryKey, categoryName = p.categoryName;
 
-    if(p.isNewCategory){
-      const rows = document.querySelectorAll('.field-row');
-      const fieldsForCategory = [];
-      rows.forEach(row=>{
-        const lbl = row.querySelector('.cf-label').value.trim();
-        const val = row.querySelector('.cf-value').value.trim();
-        if(lbl){
-          const key = slug(lbl);
-          attrs[key] = val;
-          fieldsForCategory.push({ key, label: lbl, options: val ? [val] : [] });
-        }
-      });
-      try{
-        await db.collection('categories').doc(categoryKey).set({ name: categoryName, unit, fields: fieldsForCategory });
-      }catch(e){ showToast('Errore creazione categoria', 'out'); return; }
-    } else {
-      const template = p.fieldsTemplate || [];
-      const updatedFields = template.map(f=>{
-        const el = document.getElementById('f-attr-' + f.key);
-        const val = el ? el.value.trim() : '';
-        if(val) attrs[f.key] = val;
-        let options = f.options || [];
-        if(val && !options.some(o => o.toLowerCase() === val.toLowerCase())){
-          options = options.concat([val]);
-        }
-        return { key:f.key, label:f.label, options };
-      });
-      try{
-        await db.collection('categories').doc(categoryKey).set({ name: categoryName, unit: S.categories[categoryKey] ? S.categories[categoryKey].unit : unit, fields: updatedFields }, { merge:true });
-      }catch(e){}
-    }
-
-    const ddtPhotoPaths = await uploadPhotoSet(p.ddtFiles, 'ddt-photos', name, dest);
-    const materialPhotoPaths = await uploadPhotoSet(p.materialFiles, 'material-photos', name, dest);
-
     try{
-      await db.collection('catalog').doc(p.code).set({ name, categoryKey, categoryName, unit, attributes: attrs });
-      await db.collection('movements').add({
-        code: p.code, name, categoryKey, categoryName, unit, attributes: attrs,
-        direction: S.direction, qty, operator: S.operator, dest: dest || null, timestamp: Date.now(),
+      if(p.isNewCategory){
+        const rows = document.querySelectorAll('.field-row');
+        const fieldsForCategory = [];
+        rows.forEach(row=>{
+          const lbl = row.querySelector('.cf-label').value.trim();
+          const val = row.querySelector('.cf-value').value.trim();
+          if(lbl){
+            const key = slug(lbl);
+            attrs[key] = val;
+            fieldsForCategory.push({ key, label: lbl, options: val ? [val] : [] });
+          }
+        });
+        await apiPost({ action:'upsertCategory', category:{ key: categoryKey, name: categoryName, unit, fields: fieldsForCategory } });
+      } else {
+        const template = p.fieldsTemplate || [];
+        const updatedFields = template.map(f=>{
+          const el = document.getElementById('f-attr-' + f.key);
+          const val = el ? el.value.trim() : '';
+          if(val) attrs[f.key] = val;
+          let options = f.options || [];
+          if(val && !options.some(o => o.toLowerCase() === val.toLowerCase())){
+            options = options.concat([val]);
+          }
+          return { key:f.key, label:f.label, options };
+        });
+        await apiPost({ action:'upsertCategory', category:{ key: categoryKey, name: categoryName, unit: S.categories[categoryKey] ? S.categories[categoryKey].unit : unit, fields: updatedFields } });
+      }
+
+      const ddtPhotoPaths = await uploadPhotoSet(p.ddtFiles, 'ddt', name, dest);
+      const materialPhotoPaths = await uploadPhotoSet(p.materialFiles, 'material', name, dest);
+
+      await apiPost({ action:'upsertCatalog', entry:{ code: p.code, name, categoryKey, categoryName, unit, attributes: attrs } });
+      await apiPost({ action:'addMovement', movement:{
+        timestamp: Date.now(), code: p.code, name, categoryKey, categoryName, unit, attributes: attrs,
+        direction: S.direction, qty, operator: S.operator, dest: dest || null,
         ddtPhotoPaths, materialPhotoPaths
-      });
-    }catch(e){ showToast('Errore salvataggio movimento', 'out'); return; }
+      }});
+    }catch(e){
+      showToast('Errore di salvataggio: ' + e.message, 'out');
+      if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = originalBtnText; }
+      return;
+    }
 
     S.pending = null;
     showToast((S.direction==='IN'?'↓ Entrata':'↑ Uscita') + ' registrata - ' + fmtQty(qty,unit) + ' ' + name, S.direction==='IN'?'in':'out');
     render();
+    syncData({forceRender:true});
   }
 
   function cancelPending(){ S.pending = null; render(); }
@@ -723,6 +661,13 @@
 
   function render(){
     const app = document.getElementById('app');
+    if(!isConfigured()){
+      app.innerHTML = `<div style="padding:40px 24px;text-align:center;font-family:Inter,sans-serif;">
+        <div class="display" style="font-size:20px;color:var(--ink);margin-bottom:10px;">Configurazione mancante</div>
+        <div style="font-size:14px;line-height:1.6;color:var(--ink-dim);">Inserisci l'URL del tuo Web App Google Apps Script nella costante <span class="mono">APPS_SCRIPT_URL</span> in cima al file HTML, poi ricarica la pagina.</div>
+      </div>`;
+      return;
+    }
     if(!S.loaded){
       app.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink-dim);font-family:Inter,sans-serif;">Caricamento dati magazzino...</div>';
       return;
@@ -817,7 +762,7 @@
           <label>${S.direction==='IN' ? 'Fornitore / Provenienza' : 'Destinazione / Cliente'} (opzionale)</label>
           <input type="text" id="f-dest" placeholder="${S.direction==='IN' ? 'Es. Fornitore SpA' : 'Es. Cantiere Noviglio'}">
 
-          <label>Foto DDT (una o pi\u00f9)</label>
+          <label>Foto DDT (una o più)</label>
           <input type="file" id="f-ddt-photos" accept="image/*" capture="environment" multiple>
           <div id="ddt-photos-preview" class="photo-preview"></div>
 
@@ -886,13 +831,26 @@
     return vals.length ? vals.join(' - ') : '';
   }
 
+  function photoLinksHTML(paths, label){
+    if(!paths || !paths.length) return '';
+    const isUrl = /^https?:\/\//.test(paths[0]);
+    if(isUrl){
+      return paths.map((p,i)=>`<a href="${escapeAttr(p)}" target="_blank" rel="noopener">${escapeHTML(label)} ${i+1}</a>`).join(' &middot; ');
+    }
+    return `${paths.length} ${escapeHTML(label.toLowerCase())}`;
+  }
+
   function moveRowHTML(mv){
     const summary = attrsSummary(mv);
     const nDdt = (mv.ddtPhotoPaths||[]).length;
     const nMat = (mv.materialPhotoPaths||[]).length;
-    const photoNote = (nDdt || nMat)
-      ? `<br>\uD83D\uDCCE ${nDdt ? nDdt+' foto DDT' : ''}${nDdt && nMat ? ', ' : ''}${nMat ? nMat+' foto materiale' : ''}`
-      : '';
+    let photoNote = '';
+    if(nDdt || nMat){
+      const parts = [];
+      if(nDdt) parts.push(photoLinksHTML(mv.ddtPhotoPaths, 'Foto DDT'));
+      if(nMat) parts.push(photoLinksHTML(mv.materialPhotoPaths, 'Foto materiale'));
+      photoNote = '<br>📎 ' + parts.join(' &middot; ');
+    }
     return `
       <div class="move-row">
         <div class="info">
@@ -907,53 +865,19 @@
     `;
   }
 
-  async function exportDDTPhotosZip(){
-    if(!PHOTOS_STORAGE_ENABLED){
-      showToast('Modalit\u00e0 dimostrativa: le foto non sono salvate, quindi non c\u2019\u00e8 nulla da esportare. Abilita Firebase Storage per usare questa funzione.', 'out');
-      return;
-    }
-    if(typeof JSZip === 'undefined'){ showToast('Libreria ZIP non disponibile', 'out'); return; }
-    const withPhotos = S.movements.filter(mv => mv.ddtPhotoPaths && mv.ddtPhotoPaths.length);
-    if(!withPhotos.length){ showToast('Nessuna foto DDT trovata nello storico', 'out'); return; }
-
-    showToast('Preparazione ZIP in corso\u2026 pu\u00f2 richiedere qualche secondo', 'in');
-    const zip = new JSZip();
-    let count = 0, failed = 0;
-
-    for(const mv of withPhotos){
-      const supplierFolder = slug(mv.dest || 'senza-fornitore');
-      const productFolder = slug(mv.name) + '_' + new Date(mv.timestamp).toISOString().slice(0,10);
-      for(const path of mv.ddtPhotoPaths){
-        try{
-          const url = await storage.ref().child(path).getDownloadURL();
-          const resp = await fetch(url);
-          const blob = await resp.blob();
-          const filename = path.split('/').pop();
-          zip.folder(supplierFolder).folder(productFolder).file(filename, blob);
-          count++;
-        }catch(e){ failed++; }
-      }
-    }
-
-    if(!count){ showToast('Impossibile scaricare le foto (verifica CORS su Firebase Storage)', 'out'); return; }
-
-    try{
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'foto-ddt-magazzino.zip';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast(`ZIP creato: ${count} foto` + (failed ? `, ${failed} non scaricate` : ''), 'in');
-    }catch(e){ showToast('Errore nella creazione dello ZIP', 'out'); }
-  }
-
   function historyTabHTML(){
+    const ddtUrl = S.folders && S.folders.ddtRootUrl;
+    const matUrl = S.folders && S.folders.materialRootUrl;
     return `
       <div class="card">
         <input type="text" id="hist-filter" placeholder="Cerca per codice, prodotto, categoria, operatore..." value="${escapeAttr(S.filterHistory)}">
         <button class="btn small" id="export-csv">Esporta CSV</button>
-        <button class="btn small" id="export-ddt-zip" style="margin-left:8px;">Esporta foto DDT (ZIP)</button>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:8px;">Foto DDT e materiale (Google Drive)</div>
+        <div class="scan-hint" style="text-align:left;margin:0 0 10px;">Le foto sono organizzate su Drive per fornitore e prodotto. Apri la cartella e scarica tutto come ZIP direttamente da Drive (tasto destro sulla cartella -&gt; Scarica), oppure apri il link della singola foto da un movimento nello storico.</div>
+        ${ddtUrl ? `<a href="${escapeAttr(ddtUrl)}" target="_blank" rel="noopener" class="btn ghost" style="text-decoration:none;display:block;margin-bottom:8px;">Apri cartella Foto DDT</a>` : `<div class="scan-hint">Cartelle Drive non ancora disponibili, riprova tra poco.</div>`}
+        ${matUrl ? `<a href="${escapeAttr(matUrl)}" target="_blank" rel="noopener" class="btn ghost" style="text-decoration:none;display:block;">Apri cartella Foto Materiale</a>` : ``}
       </div>
       <div class="card" id="hist-list"></div>
     `;
@@ -1079,7 +1003,6 @@
       updateHistoryList();
       document.getElementById('hist-filter').oninput = (e) => { S.filterHistory = e.target.value; updateHistoryList(); };
       document.getElementById('export-csv').onclick = exportCSV;
-      document.getElementById('export-ddt-zip').onclick = exportDDTPhotosZip;
     } else if(S.tab === 'stock'){
       updateStockList();
       document.getElementById('stock-filter').oninput = (e) => { S.filterStock = e.target.value; updateStockList(); };
@@ -1109,9 +1032,12 @@
   function escapeAttr(s){ return escapeHTML(s); }
 
   (function init(){
-    render();
     loadOperator();
-    initFirestoreListeners();
+    render();
+    if(isConfigured()){
+      syncData({forceRender:true});
+      setInterval(()=>syncData(), 5000);
+    }
   })();
 })();
 </script>
