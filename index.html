@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#006eb6">
+<title>Controllo Merci — Magazzino</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.5.4/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<style>
+  :root{
+    --bg:#f6f8fa;
+    --panel:#ffffff;
+    --panel-alt:#eef2f6;
+    --line:#dbe3ea;
+    --ink:#101c26;
+    --ink-dim:#5c6b78;
+    --brand:#006eb6;
+    --brand-dark:#00436e;
+    --brand-light:#e5f2fa;
+    --in:#006eb6;
+    --in-dim:#e5f2fa;
+    --out:#00436e;
+    --out-dim:#e2eaf0;
+    --warn:#00436e;
+    --warn-dim:#e5f2fa;
+    --blue:#006eb6;
+    --blue-dim:#e5f2fa;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);}
+  body{overscroll-behavior-y:none;}
+  #app{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+    max-width:520px;
+    margin:0 auto;
+    position:relative;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .display{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:0.02em;}
+
+  .stripe{
+    height:14px;width:100%;
+    background-image: repeating-linear-gradient(90deg,
+      var(--line) 0px, var(--line) 2px, transparent 2px, transparent 5px,
+      var(--line) 5px, var(--line) 6px, transparent 6px, transparent 10px,
+      var(--line) 10px, var(--line) 13px, transparent 13px, transparent 16px,
+      var(--line) 16px, var(--line) 17px, transparent 17px, transparent 22px,
+      var(--line) 22px, var(--line) 25px, transparent 25px, transparent 28px);
+    opacity:0.6;
+  }
+  .stripe.accent-in{background-image: repeating-linear-gradient(90deg,
+      var(--in) 0px, var(--in) 2px, transparent 2px, transparent 5px,
+      var(--in) 5px, var(--in) 6px, transparent 6px, transparent 10px,
+      var(--in) 10px, var(--in) 13px, transparent 13px, transparent 16px,
+      var(--in) 16px, var(--in) 17px, transparent 17px, transparent 22px,
+      var(--in) 22px, var(--in) 25px, transparent 25px, transparent 28px);
+    opacity:0.9;}
+  .stripe.accent-out{background-image: repeating-linear-gradient(90deg,
+      var(--out) 0px, var(--out) 2px, transparent 2px, transparent 5px,
+      var(--out) 5px, var(--out) 6px, transparent 6px, transparent 10px,
+      var(--out) 10px, var(--out) 13px, transparent 13px, transparent 16px,
+      var(--out) 16px, var(--out) 17px, transparent 17px, transparent 22px,
+      var(--out) 22px, var(--out) 25px, transparent 25px, transparent 28px);
+    opacity:0.9;}
+
+  .topbar{
+    padding:16px 18px 12px;
+    display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);
+  }
+  .topbar h1{font-size:22px;margin:0;line-height:1;}
+  .topbar-brand{display:flex;align-items:center;gap:10px;}
+  .brand-logo{height:26px;width:auto;display:block;}
+  .topbar .op{
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim);
+    text-align:right;cursor:pointer;border:1px solid var(--line);padding:6px 9px;border-radius:8px;
+  }
+  .topbar .op:hover{border-color:var(--ink-dim);}
+
+  main{flex:1;padding:16px 18px calc(90px + env(safe-area-inset-bottom));overflow-y:auto;}
+
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(16,28,38,0.04);
+  }
+
+  .dir-toggle{
+    display:flex;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);margin-bottom:14px;
+  }
+  .dir-toggle button{
+    flex:1;padding:14px 0;background:var(--panel);border:none;color:var(--ink-dim);
+    font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;letter-spacing:0.04em;
+    cursor:pointer;text-transform:uppercase;transition:background .15s,color .15s;
+  }
+  .dir-toggle button.active.in{background:var(--in);color:#ffffff;}
+  .dir-toggle button.active.out{background:var(--out);color:#ffffff;}
+  .dir-toggle button:not(.active):hover{color:var(--ink);}
+
+  .btn{
+    display:block;width:100%;padding:15px 16px;border-radius:var(--radius);border:1px solid var(--line);
+    background:var(--panel-alt);color:var(--ink);font-family:'Inter',sans-serif;font-weight:600;font-size:15px;
+    cursor:pointer;text-align:center;
+  }
+  .btn:active{transform:translateY(1px);}
+  .btn.primary.in{background:var(--in);color:#ffffff;border-color:var(--in);}
+  .btn.primary.out{background:var(--out);color:#ffffff;border-color:var(--out);}
+  .btn.ghost{background:transparent;color:var(--ink-dim);border:1px dashed var(--line);font-weight:500;font-size:13px;padding:10px;}
+  .btn.small{padding:8px 12px;font-size:13px;width:auto;display:inline-block;}
+  .btn:disabled{opacity:0.5;cursor:not-allowed;}
+
+  #reader{border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);margin-bottom:10px;width:100%!important;}
+  #reader video{border-radius:var(--radius);width:100%!important;height:auto!important;object-fit:cover;}
+  #reader img{display:none!important;}
+
+  .scan-hint{font-size:12px;color:var(--ink-dim);text-align:center;margin:6px 0 14px;}
+
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-dim);margin-bottom:6px;font-weight:600;}
+  input[type=text],input[type=number]{
+    width:100%;background:var(--panel-alt);border:1px solid var(--line);color:var(--ink);
+    padding:11px 12px;border-radius:8px;font-family:'Inter',sans-serif;font-size:15px;margin-bottom:12px;
+  }
+  input:focus{outline:none;border-color:var(--ink-dim);}
+
+  .code-chip{
+    font-family:'JetBrains Mono',monospace;background:var(--panel-alt);border:1px solid var(--line);
+    padding:8px 10px;border-radius:8px;font-size:14px;display:inline-block;margin-bottom:10px;word-break:break-all;
+  }
+
+  .stepper{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .stepper button{
+    width:42px;height:42px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-alt);color:var(--ink);font-size:20px;cursor:pointer;flex-shrink:0;
+  }
+  .stepper input{text-align:center;margin:0;width:70px;}
+
+  .badge{
+    display:inline-block;padding:3px 8px;border-radius:5px;font-size:10px;
+    font-weight:700;text-transform:uppercase;letter-spacing:0.04em;font-family:'Barlow Condensed',sans-serif;
+  }
+  .badge.in{background:var(--in-dim);color:var(--in);}
+  .badge.out{background:var(--out-dim);color:var(--out);}
+  .badge.new{background:var(--warn-dim);color:var(--warn);}
+  .badge.cat{background:var(--brand-light);color:var(--brand);margin-left:6px;}
+
+  .move-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:11px 0;border-bottom:1px solid var(--line);gap:10px;
+  }
+  .move-row:last-child{border-bottom:none;}
+  .move-row .info{flex:1;min-width:0;}
+  .move-row .name{font-weight:600;font-size:14px;}
+  .move-row .meta{font-size:11px;color:var(--ink-dim);font-family:'JetBrains Mono',monospace;margin-top:3px;line-height:1.5;}
+  .move-row .qty{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;white-space:nowrap;}
+
+  .tabs{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:520px;display:flex;background:var(--panel);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabs button{
+    flex:1;padding:13px 0 10px;background:none;border:none;color:var(--ink-dim);
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;
+    text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;
+  }
+  .tabs button.active{color:var(--ink);border-top:2px solid var(--brand);padding-top:11px;}
+
+  .empty{text-align:center;color:var(--ink-dim);font-size:13px;padding:24px 10px;}
+
+  .toast{
+    position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    padding:10px 16px;border-radius:8px;font-size:13px;z-index:50;
+    box-shadow:0 8px 24px rgba(16,28,38,0.12);display:flex;align-items:center;gap:8px;max-width:88%;
+  }
+  .toast.in{border-color:var(--in);}
+  .toast.out{border-color:var(--out);}
+
+  .section-title{font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-dim);font-weight:700;margin:2px 0 10px;}
+
+  .stock-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);gap:10px;}
+  .stock-row:last-child{border-bottom:none;}
+  .stock-row .info{flex:1;min-width:0;}
+  .stock-row .name{font-weight:600;font-size:14px;}
+  .stock-row .meta{font-size:11px;color:var(--ink-dim);margin-top:3px;}
+  .stock-row .qty-badge{
+    font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;
+    padding:3px 10px;border-radius:6px;background:var(--panel-alt);white-space:nowrap;
+  }
+  .stock-row .qty-badge.zero{color:var(--ink-dim);}
+  .stock-row .qty-badge.low{color:var(--warn);}
+
+  .field-row{display:flex;gap:8px;align-items:flex-start;}
+  .field-row input{flex:1;}
+  .field-row .rm{
+    width:42px;height:42px;flex-shrink:0;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-alt);color:var(--out);cursor:pointer;font-size:18px;margin-top:0;
+  }
+
+  input[type=file]{
+    width:100%;background:var(--panel-alt);border:1px dashed var(--line);border-radius:8px;
+    padding:10px 12px;font-size:12px;color:var(--ink-dim);margin-bottom:8px;
+  }
+  .photo-preview{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+  .photo-thumb{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line);flex-shrink:0;}
+  .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-thumb .photo-rm{
+    position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;
+    background:rgba(16,28,38,0.75);color:#fff;border:none;font-size:13px;line-height:1;cursor:pointer;padding:0;
+  }
+
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="toast-slot"></div>
+<div id="app"></div>
+
+<script>
+(function(){
+  const firebaseConfig = {
+    apiKey: "AIzaSyDazo07WCjOZe7U7ez8xHvw6rFySmJIQcY",
+    authDomain: "magazzino-prova.firebaseapp.com",
+    projectId: "magazzino-prova",
+    storageBucket: "magazzino-prova.firebasestorage.app",
+    messagingSenderId: "514987024989",
+    appId: "1:514987024989:web:54f193c8228d1ea76e63b4"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const storage = firebase.storage();
+
+  const COMMON_UNITS = ['pz','m','kg','l','conf.','bobina','kit','coppia','set'];
+
+  const DEFAULT_CATEGORIES = [
+    { name:'Cavi elettrici', unit:'m', fields:[
+      {key:'sigla', label:'Sigla cavo (CEI-UNEL 35011)', options:[
+        'FG16OR16 (ex FG7OR)','FG16OM16 (ex FG7OM1)','FG16M16 (ex FG7M1)','FG16R16 (ex FG7R)',
+        'FS17 (ex N07V-K)','FG17 (ex N07G9-K)','FG16H1R16','N1VVK','N1VV-K',
+        'H07V-K','H07V-U','H07RN-F','H05RN-F','H05VV-F','H03VV-F','FROR',
+        'FTG10OM1','FTG18OM1','RG58','UTP Cat.6'
+      ]},
+      {key:'sezione', label:'Sezione (mm2, CEI-UNEL/IEC 60228)', options:['0.5','0.75','1','1.5','2.5','4','6','10','16','25','35','50','70','95','120','150','185','240','300','400','500','630']},
+      {key:'poli', label:'N. poli/conduttori', options:['1','2','3','4','5','7','12']},
+      {key:'marca', label:'Marca', options:['Prysmian','Nexans','General Cable','Cavicel','Elandcavi']},
+      {key:'codiceProduttore', label:'Codice produttore', options:[]}
+    ]},
+    { name:'Canalizzazioni e supporti', unit:'m', fields:[
+      {key:'tipo', label:'Tipo', options:['Canalina metallica','Passerella','Tubo corrugato','Guaina spiralata','Canalina PVC']},
+      {key:'dimensioni', label:'Dimensioni (LxH mm)', options:['50x25','75x25','100x50','150x50','200x60','300x75']},
+      {key:'materiale', label:'Materiale', options:['Acciaio zincato','PVC','Alluminio','Acciaio inox']},
+      {key:'marca', label:'Marca', options:[]}
+    ]},
+    { name:'Quadri e componenti BT', unit:'pz', fields:[
+      {key:'tipo', label:'Tipo', options:['Interruttore magnetotermico','Differenziale','Magnetotermico differenziale','Sezionatore','Contattore','Quadro completo','Fusibile']},
+      {key:'marca', label:'Marca', options:['ABB','Schneider Electric','Siemens','Legrand','Eaton']},
+      {key:'caratteristiche', label:'Caratteristiche (In/poli/Icu)', options:[]},
+      {key:'codiceArticolo', label:'Codice articolo', options:[]}
+    ]},
+    { name:'Connettori e morsetteria', unit:'pz', fields:[
+      {key:'tipo', label:'Tipo', options:['Morsetto','Capocorda','Pressacavo','Connettore rapido','Morsetto a molla']},
+      {key:'sezione', label:'Sezione compatibile (mm2)', options:['0.5','0.75','1','1.5','2.5','4','6','10','16','25','35','50','70','95']},
+      {key:'marca', label:'Marca', options:['Wago','Phoenix Contact','Weidmuller']}
+    ]},
+    { name:'Illuminazione', unit:'pz', fields:[
+      {key:'tipo', label:'Tipo', options:['Plafoniera LED','Faretto','Lampada di emergenza','Proiettore','Segnalatore']},
+      {key:'potenza', label:'Potenza (W)', options:['5','9','18','36','50','100']},
+      {key:'ip', label:'Grado IP', options:['IP20','IP44','IP65','IP66']},
+      {key:'marca', label:'Marca', options:[]}
+    ]},
+    { name:'Strumentazione e misura', unit:'pz', fields:[
+      {key:'tipo', label:'Tipo', options:['Trasformatore di corrente (TA)','Trasformatore di tensione (TV)','Contatore energia','Analizzatore di rete','Multimetro']},
+      {key:'marca', label:'Marca', options:['Schneider Electric','ABB','Circutor','Carlo Gavazzi']}
+    ]},
+    { name:'DPI e materiale di consumo', unit:'pz', fields:[
+      {key:'tipo', label:'Tipo', options:['Guanti isolanti','Casco','Nastro isolante','Fascette','Occhiali protettivi','Scarpe antinfortunistiche']},
+      {key:'marca', label:'Marca', options:[]}
+    ]},
+    { name:'Altro', unit:'pz', fields:[
+      {key:'descrizione', label:'Descrizione', options:[]}
+    ]}
+  ];
+
+  const S = {
+    tab: 'scan', direction: 'IN', operator: null, scanning: false, pending: null,
+    categories: {}, catalog: {}, movements: [], toast: null,
+    filterHistory: '', filterStock: '', html5QrCode: null, loaded: false
+  };
+
+  const OPERATOR_KEY = 'operator-name';
+
+  function slug(s){
+    return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || ('cat-' + Date.now().toString(36));
+  }
+  function fmtTime(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  }
+  function fmtQty(q, unit){
+    const n = Number(q);
+    const s = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+    return s + ' ' + (unit || 'pz');
+  }
+  function showToast(msg, kind){
+    const slot = document.getElementById('toast-slot');
+    if(!slot) return;
+    slot.innerHTML = `<div class="toast ${kind}">${escapeHTML(msg)}</div>`;
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>{ slot.innerHTML = ''; }, 2400);
+  }
+
+  let movementsReady = false, catalogReady = false, categoriesReady = false, seedAttempted = false;
+  function markReadyIfComplete(){
+    if(movementsReady && catalogReady && categoriesReady && !S.loaded){ S.loaded = true; }
+    render();
+  }
+
+  function seedDefaultCategoriesIfEmpty(snap){
+    if(seedAttempted) return;
+    seedAttempted = true;
+    if(snap.empty){
+      const batch = db.batch();
+      DEFAULT_CATEGORIES.forEach(cat=>{
+        const key = slug(cat.name);
+        batch.set(db.collection('categories').doc(key), cat);
+      });
+      batch.commit().catch(()=>{});
+    }
+  }
+
+  function initFirestoreListeners(){
+    db.collection('movements').orderBy('timestamp','desc').limit(1000)
+      .onSnapshot(snap => {
+        S.movements = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+        movementsReady = true; markReadyIfComplete();
+      }, () => { movementsReady = true; markReadyIfComplete(); });
+
+    db.collection('catalog').onSnapshot(snap => {
+      const cat = {};
+      snap.forEach(d => { cat[d.id] = d.data(); });
+      S.catalog = cat; catalogReady = true; markReadyIfComplete();
+    }, () => { catalogReady = true; markReadyIfComplete(); });
+
+    db.collection('categories').onSnapshot(snap => {
+      seedDefaultCategoriesIfEmpty(snap);
+      const cats = {};
+      snap.forEach(d => { cats[d.id] = d.data(); });
+      if(Object.keys(cats).length) S.categories = cats;
+      categoriesReady = true; markReadyIfComplete();
+    }, () => { categoriesReady = true; markReadyIfComplete(); });
+  }
+
+  function loadOperator(){
+    try{ S.operator = localStorage.getItem(OPERATOR_KEY) || null; } catch(e){ S.operator = null; }
+  }
+  function persistOperator(name){ try{ localStorage.setItem(OPERATOR_KEY, name); }catch(e){} }
+
+  function findCategoryByName(name){
+    const n = name.trim().toLowerCase();
+    for(const key in S.categories){
+      if(S.categories[key].name.trim().toLowerCase() === n) return Object.assign({key:key}, S.categories[key]);
+    }
+    return null;
+  }
+
+  function computeStock(){
+    const qtyMap = {};
+    for(const mv of S.movements){
+      qtyMap[mv.code] = (qtyMap[mv.code] || 0) + (mv.direction === 'IN' ? mv.qty : -mv.qty);
+    }
+    return Object.keys(qtyMap).map(code=>{
+      const product = S.catalog[code] || {};
+      const fallbackMv = S.movements.find(m => m.code === code) || {};
+      return {
+        code,
+        name: product.name || fallbackMv.name || code,
+        unit: product.unit || fallbackMv.unit || 'pz',
+        categoryName: product.categoryName || fallbackMv.categoryName || '',
+        attributes: product.attributes || fallbackMv.attributes || {},
+        qty: qtyMap[code]
+      };
+    }).sort((a,b) => a.name.localeCompare(b.name));
+  }
+
+  function triggerImport(){
+    const inp = document.getElementById('csv-file-input');
+    if(inp) inp.click();
+  }
+
+  function handleCSVFile(file){
+    if(!file || typeof Papa === 'undefined'){ showToast('Libreria CSV non disponibile', 'out'); return; }
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => { processImportRows(results.data || []); },
+      error: () => showToast('Errore nella lettura del file CSV', 'out')
+    });
+  }
+
+  async function processImportRows(rows){
+    if(!rows.length){ showToast('File CSV vuoto o non leggibile', 'out'); return; }
+    showToast('Importazione in corso\u2026', 'in');
+
+    const norm = (row, keys) => {
+      for(const k of keys){ if(row[k] != null && String(row[k]).trim() !== '') return String(row[k]).trim(); }
+      return '';
+    };
+
+    const categoryUpdates = {};
+    const catalogRows = [];
+    let skipped = 0;
+
+    rows.forEach(row=>{
+      const code = norm(row, ['codice','Codice','CODICE']);
+      if(!code){ skipped++; return; }
+      const name = norm(row, ['nome','Nome','NOME']) || code;
+      const categoryName = norm(row, ['categoria','Categoria','CATEGORIA']) || 'Altro';
+      const categoryKey = slug(categoryName);
+      const existingCat = S.categories[categoryKey];
+      const unit = norm(row, ['unita','unit\u00e0','Unita','Unit\u00e0']) || (existingCat ? existingCat.unit : 'pz');
+      const attrsRaw = norm(row, ['attributi','Attributi']);
+      const giacenzaIniziale = parseFloat(norm(row, ['giacenza_iniziale','giacenzaIniziale','scorta_iniziale','Giacenza_iniziale']));
+      const attrs = {};
+      if(attrsRaw){
+        attrsRaw.split(';').forEach(pair=>{
+          const idx = pair.indexOf(':');
+          if(idx > -1){
+            const k = slug(pair.slice(0, idx).trim());
+            const v = pair.slice(idx + 1).trim();
+            if(k && v) attrs[k] = v;
+          }
+        });
+      }
+
+      catalogRows.push({ code, name, categoryKey, categoryName, unit, attrs, giacenzaIniziale });
+
+      if(!categoryUpdates[categoryKey]){
+        const fieldsMap = {};
+        if(existingCat && existingCat.fields){
+          existingCat.fields.forEach(f=>{ fieldsMap[f.key] = { label: f.label, options: new Set(f.options || []) }; });
+        }
+        categoryUpdates[categoryKey] = { name: categoryName, unit: existingCat ? existingCat.unit : unit, fieldsMap };
+      }
+      Object.keys(attrs).forEach(k=>{
+        const cu = categoryUpdates[categoryKey];
+        if(!cu.fieldsMap[k]) cu.fieldsMap[k] = { label: k, options: new Set() };
+        cu.fieldsMap[k].options.add(attrs[k]);
+      });
+    });
+
+    const catKeys = Object.keys(categoryUpdates);
+    for(const key of catKeys){
+      const cu = categoryUpdates[key];
+      const fields = Object.keys(cu.fieldsMap).map(k => ({
+        key: k, label: cu.fieldsMap[k].label, options: Array.from(cu.fieldsMap[k].options)
+      }));
+      try{ await db.collection('categories').doc(key).set({ name: cu.name, unit: cu.unit || 'pz', fields }, { merge:true }); }
+      catch(e){}
+    }
+
+    let written = 0, failed = 0;
+    for(let i = 0; i < catalogRows.length; i += 400){
+      const chunk = catalogRows.slice(i, i + 400);
+      const batch = db.batch();
+      chunk.forEach(r=>{
+        const ref = db.collection('catalog').doc(r.code);
+        batch.set(ref, { name: r.name, categoryKey: r.categoryKey, categoryName: r.categoryName, unit: r.unit, attributes: r.attrs });
+      });
+      try{ await batch.commit(); written += chunk.length; }
+      catch(e){ failed += chunk.length; }
+    }
+
+    const stockRows = catalogRows.filter(r => r.giacenzaIniziale && r.giacenzaIniziale > 0);
+    let stockWritten = 0;
+    for(let i = 0; i < stockRows.length; i += 400){
+      const chunk = stockRows.slice(i, i + 400);
+      const batch = db.batch();
+      chunk.forEach(r=>{
+        const ref = db.collection('movements').doc();
+        batch.set(ref, {
+          code: r.code, name: r.name, categoryKey: r.categoryKey, categoryName: r.categoryName,
+          unit: r.unit, attributes: r.attrs, direction: 'IN', qty: r.giacenzaIniziale,
+          operator: S.operator || 'Import catalogo', dest: 'Giacenza iniziale da importazione', timestamp: Date.now()
+        });
+      });
+      try{ await batch.commit(); stockWritten += chunk.length; }
+      catch(e){}
+    }
+
+    let msg = `Importati ${written} prodotti in ${catKeys.length} categorie`;
+    if(stockWritten) msg += `, giacenza iniziale su ${stockWritten}`;
+    if(skipped) msg += ` \u2014 ${skipped} righe saltate (codice mancante)`;
+    if(failed) msg += ` \u2014 ${failed} non salvati (errore)`;
+    showToast(msg, failed ? 'out' : 'in');
+  }
+
+  function startScanner(){
+    const readerEl = document.getElementById('reader');
+    if(!readerEl) return;
+    if(typeof Html5Qrcode === 'undefined'){ showToast('Libreria scanner non disponibile', 'out'); S.scanning=false; render(); return; }
+    S.html5QrCode = new Html5Qrcode('reader');
+    const config = {
+      fps: 15,
+      qrbox: { width: 280, height: 120 },
+      experimentalFeatures: { useBarCodeDetectorIfSupported: false }
+    };
+    S.html5QrCode.start(
+      { facingMode: 'environment' },
+      config, onScanSuccess, () => {}
+    ).catch((err)=>{
+      const name = (err && (err.name || err.message || '')) + '';
+      let msg = 'Fotocamera non disponibile: usa inserimento manuale';
+      if(/NotAllowed|Permission/i.test(name)) msg = 'Permesso fotocamera negato. Vai nelle impostazioni del browser per questo sito e abilita la fotocamera, poi ricarica la pagina.';
+      else if(/NotFound|DevicesNotFound/i.test(name)) msg = 'Nessuna fotocamera trovata su questo dispositivo.';
+      else if(/NotReadable|TrackStart/i.test(name)) msg = 'Fotocamera occupata da un\u2019altra app. Chiudila e riprova.';
+      showToast(msg, 'out');
+      S.scanning = false; render();
+    });
+  }
+
+  function stopScanner(cb){
+    if(S.html5QrCode && S.scanning){
+      S.html5QrCode.stop().then(()=>{ S.html5QrCode.clear(); S.html5QrCode = null; S.scanning = false; if(cb) cb(); })
+      .catch(()=>{ S.html5QrCode = null; S.scanning = false; if(cb) cb(); });
+    } else if(cb) cb();
+  }
+
+  function onScanSuccess(decodedText){ stopScanner(()=>{ handleCode(decodedText.trim()); }); }
+
+  function handleCode(code){
+    if(!code) return;
+    const product = S.catalog[code];
+    if(product){
+      const cat = S.categories[product.categoryKey];
+      S.pending = {
+        code, isNew:false, isNewCategory:false, step:'details',
+        categoryKey: product.categoryKey, categoryName: product.categoryName,
+        fieldsTemplate: cat ? cat.fields : [],
+        name: product.name, unit: product.unit || 'pz',
+        attrValues: Object.assign({}, product.attributes||{}),
+        qty: 1, ddtFiles: [], materialFiles: []
+      };
+    } else {
+      S.pending = { code, isNew:true, step:'category', categoryInput:'' };
+    }
+    render();
+  }
+
+  function chooseCategory(val){
+    val = (val||'').trim();
+    if(!val){ showToast('Scrivi o scegli una categoria', 'out'); return; }
+    const match = findCategoryByName(val);
+    if(match){
+      S.pending.isNewCategory = false;
+      S.pending.categoryKey = match.key;
+      S.pending.categoryName = match.name;
+      S.pending.fieldsTemplate = match.fields;
+      S.pending.unit = match.unit || 'pz';
+    } else {
+      S.pending.isNewCategory = true;
+      S.pending.categoryKey = slug(val);
+      S.pending.categoryName = val;
+      S.pending.fieldsTemplate = [];
+      S.pending.customFields = [{label:'', value:''}];
+      S.pending.unit = 'pz';
+    }
+    S.pending.step = 'details';
+    S.pending.name = '';
+    S.pending.qty = 1;
+    S.pending.attrValues = {};
+    S.pending.ddtFiles = [];
+    S.pending.materialFiles = [];
+    render();
+  }
+
+  function renderPhotoPreview(containerId, files){
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    el.innerHTML = files.map((f,i) => `
+      <div class="photo-thumb">
+        <img src="${URL.createObjectURL(f)}">
+        <button type="button" class="photo-rm" data-i="${i}">\u00d7</button>
+      </div>
+    `).join('');
+    el.querySelectorAll('.photo-rm').forEach(btn=>{
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.i, 10);
+        files.splice(idx, 1);
+        renderPhotoPreview(containerId, files);
+      };
+    });
+  }
+
+  // ============================================================
+  // Le foto DDT/materiale sono al momento SOLO dimostrative: i campi
+  // funzionano (selezione, anteprima, rimozione) ma i file non vengono
+  // caricati da nessuna parte -- si registra solo il nome del file.
+  // Quando attiverai Firebase Storage (Blaze + bucket + regole + CORS),
+  // metti questo flag a true per abilitare il caricamento reale.
+  // ============================================================
+  const PHOTOS_STORAGE_ENABLED = false;
+
+  async function uploadPhotoSet(files, kind, name, dest){
+    if(!files || !files.length) return [];
+    if(!PHOTOS_STORAGE_ENABLED){
+      // Modalita' dimostrativa: nessuna chiamata a Firebase Storage,
+      // si registra solo il nome del file scelto.
+      return files.map(f => f.name);
+    }
+    const supplierFolder = slug(dest || 'senza-fornitore');
+    const productFolder = slug(name) + '_' + new Date().toISOString().slice(0,10);
+    const paths = [];
+    for(const file of files){
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${kind}/${supplierFolder}/${productFolder}/${Date.now()}_${safeName}`;
+      try{
+        await storage.ref().child(path).put(file);
+        paths.push(path);
+      }catch(e){ /* skip this file, continue with the rest */ }
+    }
+    return paths;
+  }
+
+  async function confirmMovement(){
+    const p = S.pending;
+    const name = document.getElementById('f-name').value.trim();
+    const unit = (document.getElementById('f-unit').value.trim()) || 'pz';
+    const qty = parseFloat(document.getElementById('f-qty').value);
+    const dest = document.getElementById('f-dest') ? document.getElementById('f-dest').value.trim() : '';
+
+    if(!name){ showToast('Inserisci nome/descrizione prodotto', 'out'); return; }
+    if(!qty || qty <= 0){ showToast('Quantita non valida', 'out'); return; }
+    if(!S.operator){ showToast('Imposta il tuo nome operatore in alto', 'out'); return; }
+
+    let attrs = {};
+    let categoryKey = p.categoryKey, categoryName = p.categoryName;
+
+    if(p.isNewCategory){
+      const rows = document.querySelectorAll('.field-row');
+      const fieldsForCategory = [];
+      rows.forEach(row=>{
+        const lbl = row.querySelector('.cf-label').value.trim();
+        const val = row.querySelector('.cf-value').value.trim();
+        if(lbl){
+          const key = slug(lbl);
+          attrs[key] = val;
+          fieldsForCategory.push({ key, label: lbl, options: val ? [val] : [] });
+        }
+      });
+      try{
+        await db.collection('categories').doc(categoryKey).set({ name: categoryName, unit, fields: fieldsForCategory });
+      }catch(e){ showToast('Errore creazione categoria', 'out'); return; }
+    } else {
+      const template = p.fieldsTemplate || [];
+      const updatedFields = template.map(f=>{
+        const el = document.getElementById('f-attr-' + f.key);
+        const val = el ? el.value.trim() : '';
+        if(val) attrs[f.key] = val;
+        let options = f.options || [];
+        if(val && !options.some(o => o.toLowerCase() === val.toLowerCase())){
+          options = options.concat([val]);
+        }
+        return { key:f.key, label:f.label, options };
+      });
+      try{
+        await db.collection('categories').doc(categoryKey).set({ name: categoryName, unit: S.categories[categoryKey] ? S.categories[categoryKey].unit : unit, fields: updatedFields }, { merge:true });
+      }catch(e){}
+    }
+
+    const ddtPhotoPaths = await uploadPhotoSet(p.ddtFiles, 'ddt-photos', name, dest);
+    const materialPhotoPaths = await uploadPhotoSet(p.materialFiles, 'material-photos', name, dest);
+
+    try{
+      await db.collection('catalog').doc(p.code).set({ name, categoryKey, categoryName, unit, attributes: attrs });
+      await db.collection('movements').add({
+        code: p.code, name, categoryKey, categoryName, unit, attributes: attrs,
+        direction: S.direction, qty, operator: S.operator, dest: dest || null, timestamp: Date.now(),
+        ddtPhotoPaths, materialPhotoPaths
+      });
+    }catch(e){ showToast('Errore salvataggio movimento', 'out'); return; }
+
+    S.pending = null;
+    showToast((S.direction==='IN'?'↓ Entrata':'↑ Uscita') + ' registrata - ' + fmtQty(qty,unit) + ' ' + name, S.direction==='IN'?'in':'out');
+    render();
+  }
+
+  function cancelPending(){ S.pending = null; render(); }
+  function setDirection(dir){ S.direction = dir; render(); }
+  function setTab(tab){ stopScanner(); S.tab = tab; S.pending = null; render(); }
+
+  function promptOperator(){
+    const name = prompt('Nome operatore:', S.operator || '');
+    if(name && name.trim()){ S.operator = name.trim(); persistOperator(S.operator); render(); }
+  }
+
+  function exportCSV(){
+    const rows = [['Data/Ora','Direzione','Codice','Categoria','Prodotto','Attributi','Quantita','Unita','Operatore','Destinazione/Fornitore']];
+    for(const mv of S.movements){
+      const attrsStr = mv.attributes ? Object.values(mv.attributes).filter(Boolean).join(' | ') : '';
+      rows.push([fmtTime(mv.timestamp), mv.direction, mv.code, mv.categoryName||'', mv.name, attrsStr, mv.qty, mv.unit||'pz', mv.operator, mv.dest||'']);
+    }
+    const csv = rows.map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'movimenti-magazzino.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function render(){
+    const app = document.getElementById('app');
+    if(!S.loaded){
+      app.innerHTML = '<div style="padding:40px;text-align:center;color:var(--ink-dim);font-family:Inter,sans-serif;">Caricamento dati magazzino...</div>';
+      return;
+    }
+    app.innerHTML = `
+      <div class="stripe ${S.direction==='IN'?'accent-in':'accent-out'}"></div>
+      <div class="topbar">
+        <div class="topbar-brand">
+          <img src="logo-engie.png" alt="ENGIE" class="brand-logo" onerror="this.style.display='none'">
+          <h1 class="display">Controllo Merci</h1>
+        </div>
+        <div class="op" id="op-btn">${S.operator ? escapeHTML(S.operator) : 'Imposta operatore'}</div>
+      </div>
+      <main id="main"></main>
+      <div class="tabs">
+        <button data-tab="scan" class="${S.tab==='scan'?'active':''}">Scansiona</button>
+        <button data-tab="history" class="${S.tab==='history'?'active':''}">Storico</button>
+        <button data-tab="stock" class="${S.tab==='stock'?'active':''}">Giacenze</button>
+      </div>
+    `;
+    document.getElementById('op-btn').onclick = promptOperator;
+    document.querySelectorAll('.tabs button').forEach(b=>{ b.onclick = () => setTab(b.dataset.tab); });
+    renderMain();
+  }
+
+  function renderMain(){
+    const main = document.getElementById('main');
+    if(S.tab === 'scan') main.innerHTML = scanTabHTML();
+    else if(S.tab === 'history') main.innerHTML = historyTabHTML();
+    else main.innerHTML = stockTabHTML();
+    attachMainHandlers();
+  }
+
+  function categoryDatalistHTML(){
+    const names = Object.values(S.categories).map(c=>c.name);
+    return `<datalist id="dl-categories">${names.map(n=>`<option value="${escapeAttr(n)}">`).join('')}</datalist>`;
+  }
+  function unitDatalistHTML(){
+    return `<datalist id="dl-units">${COMMON_UNITS.map(u=>`<option value="${escapeAttr(u)}">`).join('')}</datalist>`;
+  }
+  function fieldDatalistHTML(field){
+    return `<datalist id="dl-field-${field.key}">${(field.options||[]).map(o=>`<option value="${escapeAttr(o)}">`).join('')}</datalist>`;
+  }
+
+  function scanTabHTML(){
+    const p = S.pending;
+    if(p && p.step === 'category'){
+      return `
+        <div class="card">
+          <div class="code-chip mono">${escapeHTML(p.code)}</div>
+          <span class="badge new">Codice nuovo</span>
+          <div style="height:12px"></div>
+          <label>Categoria prodotto</label>
+          <input type="text" id="f-category" list="dl-categories" placeholder="Es. Cavi elettrici, oppure scrivine una nuova">
+          ${categoryDatalistHTML()}
+          <div class="scan-hint" style="text-align:left;margin:0 0 14px;">Scrivi il nome di una categoria esistente o una nuova: se non esiste, te la faccio costruire al passo successivo.</div>
+          <button class="btn primary ${S.direction==='IN'?'in':'out'}" id="cat-continue">Continua</button>
+          <div style="height:8px"></div>
+          <button class="btn ghost" id="cancel-btn">Annulla</button>
+        </div>
+      `;
+    }
+    if(p && p.step === 'details'){
+      return `
+        <div class="card">
+          <div class="code-chip mono">${escapeHTML(p.code)}</div>
+          <span class="badge ${p.isNew ? 'new' : (S.direction==='IN'?'in':'out')}">${p.isNew ? 'Nuovo prodotto' : 'Prodotto noto'}</span>
+          <span class="badge cat">${escapeHTML(p.categoryName)}${p.isNewCategory ? ' - nuova' : ''}</span>
+          <div style="height:12px"></div>
+
+          <label>Nome / descrizione prodotto</label>
+          <input type="text" id="f-name" value="${escapeAttr(p.name)}" placeholder="Es. Cavo FG16OR16 3x2.5mm2">
+
+          ${fieldsFormHTML(p)}
+
+          <div class="row2" style="display:flex;gap:10px;">
+            <div style="flex:1;">
+              <label>Quantita</label>
+              <div class="stepper">
+                <button id="qty-minus" type="button">-</button>
+                <input type="number" id="f-qty" value="${p.qty}" min="0.01" step="any">
+                <button id="qty-plus" type="button">+</button>
+              </div>
+            </div>
+            <div style="flex:1;">
+              <label>Unita di misura</label>
+              <input type="text" id="f-unit" list="dl-units" value="${escapeAttr(p.unit)}">
+              ${unitDatalistHTML()}
+            </div>
+          </div>
+
+          <label>${S.direction==='IN' ? 'Fornitore / Provenienza' : 'Destinazione / Cliente'} (opzionale)</label>
+          <input type="text" id="f-dest" placeholder="${S.direction==='IN' ? 'Es. Fornitore SpA' : 'Es. Cantiere Noviglio'}">
+
+          <label>Foto DDT (una o pi\u00f9)</label>
+          <input type="file" id="f-ddt-photos" accept="image/*" capture="environment" multiple>
+          <div id="ddt-photos-preview" class="photo-preview"></div>
+
+          <label>Foto materiale / scatola</label>
+          <input type="file" id="f-material-photos" accept="image/*" capture="environment" multiple>
+          <div id="material-photos-preview" class="photo-preview"></div>
+
+          <button class="btn primary ${S.direction==='IN'?'in':'out'}" id="confirm-btn">Conferma ${S.direction==='IN'?'↓ entrata':'↑ uscita'}</button>
+          <div style="height:8px"></div>
+          <button class="btn ghost" id="cancel-btn">Annulla</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="dir-toggle">
+        <button class="${S.direction==='IN'?'active in':''}" data-dir="IN">↓ Entrata</button>
+        <button class="${S.direction==='OUT'?'active out':''}" data-dir="OUT">↑ Uscita</button>
+      </div>
+      <div class="card">
+        ${S.scanning ? `<div id="reader"></div><div class="scan-hint">QR: inquadra intero. Barcode: tieni il telefono a 10-15cm, ben illuminato, in orizzontale dentro il riquadro</div>
+          <button class="btn ghost" id="stop-scan">Interrompi scanner</button>`
+          : `<button class="btn primary ${S.direction==='IN'?'in':'out'}" id="start-scan">Avvia scanner</button>
+             <div class="scan-hint">oppure</div>
+             <input type="text" id="manual-code" placeholder="Inserisci codice manualmente">
+             <button class="btn ghost" id="manual-go">Cerca / registra codice</button>`}
+      </div>
+      ${recentMiniList()}
+    `;
+  }
+
+  function fieldsFormHTML(p){
+    if(p.isNewCategory){
+      const rows = p.customFields && p.customFields.length ? p.customFields : [{label:'',value:''}];
+      return `
+        <label>Campi di questa categoria (es. Marca, Sezione, Codice...)</label>
+        <div id="custom-fields">
+          ${rows.map((f,i)=>`
+            <div class="field-row" style="margin-bottom:10px;">
+              <input type="text" class="cf-label" placeholder="Nome campo" value="${escapeAttr(f.label)}">
+              <input type="text" class="cf-value" placeholder="Valore" value="${escapeAttr(f.value)}">
+              <button type="button" class="rm" data-idx="${i}">x</button>
+            </div>
+          `).join('')}
+        </div>
+        <button type="button" class="btn ghost" id="add-field" style="margin-bottom:12px;">+ Aggiungi campo</button>
+      `;
+    }
+    const fields = p.fieldsTemplate || [];
+    if(!fields.length) return '';
+    return fields.map(f => `
+      <label>${escapeHTML(f.label)}</label>
+      <input type="text" id="f-attr-${f.key}" list="dl-field-${f.key}" value="${escapeAttr(p.attrValues[f.key]||'')}">
+      ${fieldDatalistHTML(f)}
+    `).join('');
+  }
+
+  function recentMiniList(){
+    const recent = S.movements.slice(0,4);
+    if(!recent.length) return '';
+    return `<div class="section-title">Ultimi movimenti</div><div class="card">${recent.map(moveRowHTML).join('')}</div>`;
+  }
+
+  function attrsSummary(mv){
+    if(!mv.attributes) return '';
+    const vals = Object.values(mv.attributes).filter(Boolean);
+    return vals.length ? vals.join(' - ') : '';
+  }
+
+  function moveRowHTML(mv){
+    const summary = attrsSummary(mv);
+    const nDdt = (mv.ddtPhotoPaths||[]).length;
+    const nMat = (mv.materialPhotoPaths||[]).length;
+    const photoNote = (nDdt || nMat)
+      ? `<br>\uD83D\uDCCE ${nDdt ? nDdt+' foto DDT' : ''}${nDdt && nMat ? ', ' : ''}${nMat ? nMat+' foto materiale' : ''}`
+      : '';
+    return `
+      <div class="move-row">
+        <div class="info">
+          <div class="name">${escapeHTML(mv.name)}</div>
+          <div class="meta">${escapeHTML(mv.categoryName||'')}${summary ? ' - '+escapeHTML(summary) : ''}<br>${mv.code} - ${fmtTime(mv.timestamp)} - ${escapeHTML(mv.operator)}${mv.dest ? ' - '+escapeHTML(mv.dest) : ''}${photoNote}</div>
+        </div>
+        <div style="text-align:right;">
+          <span class="badge ${mv.direction==='IN'?'in':'out'}">${mv.direction==='IN'?'↓ Entrata':'↑ Uscita'}</span><br>
+          <span class="qty">${mv.direction==='IN'?'+':'-'}${fmtQty(mv.qty, mv.unit)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  async function exportDDTPhotosZip(){
+    if(!PHOTOS_STORAGE_ENABLED){
+      showToast('Modalit\u00e0 dimostrativa: le foto non sono salvate, quindi non c\u2019\u00e8 nulla da esportare. Abilita Firebase Storage per usare questa funzione.', 'out');
+      return;
+    }
+    if(typeof JSZip === 'undefined'){ showToast('Libreria ZIP non disponibile', 'out'); return; }
+    const withPhotos = S.movements.filter(mv => mv.ddtPhotoPaths && mv.ddtPhotoPaths.length);
+    if(!withPhotos.length){ showToast('Nessuna foto DDT trovata nello storico', 'out'); return; }
+
+    showToast('Preparazione ZIP in corso\u2026 pu\u00f2 richiedere qualche secondo', 'in');
+    const zip = new JSZip();
+    let count = 0, failed = 0;
+
+    for(const mv of withPhotos){
+      const supplierFolder = slug(mv.dest || 'senza-fornitore');
+      const productFolder = slug(mv.name) + '_' + new Date(mv.timestamp).toISOString().slice(0,10);
+      for(const path of mv.ddtPhotoPaths){
+        try{
+          const url = await storage.ref().child(path).getDownloadURL();
+          const resp = await fetch(url);
+          const blob = await resp.blob();
+          const filename = path.split('/').pop();
+          zip.folder(supplierFolder).folder(productFolder).file(filename, blob);
+          count++;
+        }catch(e){ failed++; }
+      }
+    }
+
+    if(!count){ showToast('Impossibile scaricare le foto (verifica CORS su Firebase Storage)', 'out'); return; }
+
+    try{
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'foto-ddt-magazzino.zip';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`ZIP creato: ${count} foto` + (failed ? `, ${failed} non scaricate` : ''), 'in');
+    }catch(e){ showToast('Errore nella creazione dello ZIP', 'out'); }
+  }
+
+  function historyTabHTML(){
+    return `
+      <div class="card">
+        <input type="text" id="hist-filter" placeholder="Cerca per codice, prodotto, categoria, operatore..." value="${escapeAttr(S.filterHistory)}">
+        <button class="btn small" id="export-csv">Esporta CSV</button>
+        <button class="btn small" id="export-ddt-zip" style="margin-left:8px;">Esporta foto DDT (ZIP)</button>
+      </div>
+      <div class="card" id="hist-list"></div>
+    `;
+  }
+
+  function updateHistoryList(){
+    const el = document.getElementById('hist-list');
+    if(!el) return;
+    const f = S.filterHistory.toLowerCase();
+    const list = S.movements.filter(mv =>
+      !f || mv.code.toLowerCase().includes(f) || mv.name.toLowerCase().includes(f) ||
+      (mv.categoryName||'').toLowerCase().includes(f) ||
+      mv.operator.toLowerCase().includes(f) || (mv.dest||'').toLowerCase().includes(f) ||
+      attrsSummary(mv).toLowerCase().includes(f)
+    );
+    el.innerHTML = list.length ? list.map(moveRowHTML).join('') : `<div class="empty">Nessun movimento trovato</div>`;
+  }
+
+  function stockTabHTML(){
+    return `
+      <div class="card"><input type="text" id="stock-filter" placeholder="Cerca per prodotto, codice, categoria o sigla (es. FG16OR16)..." value="${escapeAttr(S.filterStock)}"></div>
+      <div class="card" id="stock-list"></div>
+      <div class="card">
+        <div class="section-title" style="margin-bottom:8px;">Importa catalogo da CSV</div>
+        <div class="scan-hint" style="text-align:left;margin:0 0 12px;">Colonne: <span class="mono">codice, nome, categoria, unita, attributi, giacenza_iniziale</span> (le ultime due opzionali). Formato attributi: <span class="mono">chiave:valore;chiave:valore</span></div>
+        <input type="file" id="csv-file-input" accept=".csv" style="display:none;">
+        <button class="btn ghost" id="import-csv-btn">Seleziona file CSV</button>
+      </div>
+    `;
+  }
+
+  function stockAttrsSummary(s){
+    if(!s.attributes) return '';
+    const vals = Object.values(s.attributes).filter(Boolean);
+    return vals.length ? vals.join(' - ') : '';
+  }
+
+  function updateStockList(){
+    const el = document.getElementById('stock-list');
+    if(!el) return;
+    const f = S.filterStock.toLowerCase();
+    const stock = computeStock().filter(s => {
+      if(!f) return true;
+      const attrsText = Object.values(s.attributes||{}).join(' ').toLowerCase();
+      return s.code.toLowerCase().includes(f) || s.name.toLowerCase().includes(f) ||
+        (s.categoryName||'').toLowerCase().includes(f) || attrsText.includes(f);
+    });
+    el.innerHTML = stock.length ? stock.map(s => `
+      <div class="stock-row">
+        <div class="info">
+          <div class="name">${escapeHTML(s.name)}</div>
+          <div class="meta">${escapeHTML(s.categoryName||'')}${stockAttrsSummary(s) ? ' - '+escapeHTML(stockAttrsSummary(s)) : ''}</div>
+          <div class="meta mono">${s.code}</div>
+        </div>
+        <div class="qty-badge ${s.qty<=0?'zero':(s.qty<5?'low':'')}">${fmtQty(s.qty, s.unit)}</div>
+      </div>
+    `).join('') : `<div class="empty">Nessun prodotto trovato</div>`;
+  }
+
+  function attachMainHandlers(){
+    if(S.tab === 'scan'){
+      const p = S.pending;
+      if(p && p.step === 'category'){
+        document.getElementById('cat-continue').onclick = () => chooseCategory(document.getElementById('f-category').value);
+        document.getElementById('cancel-btn').onclick = cancelPending;
+        return;
+      }
+      if(p && p.step === 'details'){
+        document.getElementById('confirm-btn').onclick = confirmMovement;
+        document.getElementById('cancel-btn').onclick = cancelPending;
+        document.getElementById('qty-minus').onclick = () => {
+          const el = document.getElementById('f-qty');
+          el.value = Math.max(0.01, (parseFloat(el.value)||1) - 1);
+        };
+        document.getElementById('qty-plus').onclick = () => {
+          const el = document.getElementById('f-qty');
+          el.value = (parseFloat(el.value)||0) + 1;
+        };
+        const ddtInput = document.getElementById('f-ddt-photos');
+        if(ddtInput) ddtInput.onchange = (e) => {
+          if(!p.ddtFiles) p.ddtFiles = [];
+          p.ddtFiles.push(...Array.from(e.target.files));
+          renderPhotoPreview('ddt-photos-preview', p.ddtFiles);
+          e.target.value = '';
+        };
+        const materialInput = document.getElementById('f-material-photos');
+        if(materialInput) materialInput.onchange = (e) => {
+          if(!p.materialFiles) p.materialFiles = [];
+          p.materialFiles.push(...Array.from(e.target.files));
+          renderPhotoPreview('material-photos-preview', p.materialFiles);
+          e.target.value = '';
+        };
+        if(p.isNewCategory){
+          const addBtn = document.getElementById('add-field');
+          if(addBtn) addBtn.onclick = () => {
+            syncCustomFieldsFromDOM();
+            p.customFields.push({label:'', value:''});
+            render();
+          };
+          document.querySelectorAll('.rm').forEach(btn=>{
+            btn.onclick = () => {
+              syncCustomFieldsFromDOM();
+              const idx = parseInt(btn.dataset.idx,10);
+              p.customFields.splice(idx,1);
+              if(!p.customFields.length) p.customFields.push({label:'',value:''});
+              render();
+            };
+          });
+        }
+        return;
+      }
+      document.querySelectorAll('.dir-toggle button').forEach(b=>{ b.onclick = () => setDirection(b.dataset.dir); });
+      const startBtn = document.getElementById('start-scan');
+      if(startBtn) startBtn.onclick = () => { S.scanning = true; render(); startScanner(); };
+      const stopBtn = document.getElementById('stop-scan');
+      if(stopBtn) stopBtn.onclick = () => stopScanner(render);
+      const manualGo = document.getElementById('manual-go');
+      if(manualGo) manualGo.onclick = () => {
+        const val = document.getElementById('manual-code').value.trim();
+        if(val) handleCode(val);
+      };
+    } else if(S.tab === 'history'){
+      updateHistoryList();
+      document.getElementById('hist-filter').oninput = (e) => { S.filterHistory = e.target.value; updateHistoryList(); };
+      document.getElementById('export-csv').onclick = exportCSV;
+      document.getElementById('export-ddt-zip').onclick = exportDDTPhotosZip;
+    } else if(S.tab === 'stock'){
+      updateStockList();
+      document.getElementById('stock-filter').oninput = (e) => { S.filterStock = e.target.value; updateStockList(); };
+      const importBtn = document.getElementById('import-csv-btn');
+      if(importBtn) importBtn.onclick = triggerImport;
+      const fileInput = document.getElementById('csv-file-input');
+      if(fileInput) fileInput.onchange = (e) => {
+        const f = e.target.files[0];
+        if(f) handleCSVFile(f);
+        e.target.value = '';
+      };
+    }
+  }
+
+  function syncCustomFieldsFromDOM(){
+    const rows = document.querySelectorAll('.field-row');
+    const vals = [];
+    rows.forEach(row=>{
+      vals.push({ label: row.querySelector('.cf-label').value, value: row.querySelector('.cf-value').value });
+    });
+    if(vals.length) S.pending.customFields = vals;
+  }
+
+  function escapeHTML(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+  function escapeAttr(s){ return escapeHTML(s); }
+
+  (function init(){
+    render();
+    loadOperator();
+    initFirestoreListeners();
+  })();
+})();
+</script>
+</body>
+</html>
